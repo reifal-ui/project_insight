@@ -92,7 +92,7 @@ def logout_view(request):
 def verify_email(request, token):
     try:
         user = User.objects.get(email_verification_token=token)
-        user.verifiy_email()
+        user.verify_email()
 
         return Response({
             'message': 'Email berhasil diverifikasi.'
@@ -112,7 +112,7 @@ def resend_verification(request):
         if user.email_verified:
             return Response({
                 'error': 'Email sudah terverifikasi.'
-            }, status=status.HTTP400_BAD_REQUEST)
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         token = user.generate_verification_token()
         verification_url = f"{settings.SITE_URL}/auth/verify-email/{token}"
@@ -186,10 +186,10 @@ def reset_password(request):
             )
 
             user.set_password(new_password)
-            user.password_reset_Token = None
+            user.password_reset_token = None
             user.password_reset_expires = None
             user.save()
-            Token.obejects.filter(user=user).delete()
+            Token.objects.filter(user=user).delete()
 
             return Response({
                 'message': 'Berhasil untuk reset password.'
@@ -276,7 +276,7 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         return Organization.objects.filter(org_id__in=user_org_ids)
     
-    def perfom_update(self, serializer):
+    def perform_update(self, serializer):
         organization = self.get_object()
         user_org = UserOrganization.objects.get(
             user=self.request.user,
@@ -289,7 +289,7 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_destroy(self, instance):
         if instance.owner_user != self.request.user:
-            raise permissions.PermissonDenied("Hanya pemilik organisasi yang dapat menghapus organisasi.")
+            raise permissions.PermissionDenied("Hanya pemilik organisasi yang dapat menghapus organisasi.")
         instance.delete()
 
 @api_view(['GET'])
@@ -298,7 +298,7 @@ def organization_members(request, org_id):
     organization = get_object_or_404(Organization, org_id=org_id)
 
     try:
-        UserOrganization.objets.get(user=request.user, organization=organization)
+        UserOrganization.objects.get(user=request.user, organization=organization)
     except UserOrganization.DoesNotExist:
         return Response({
             'error': 'Acces denied'
@@ -332,7 +332,7 @@ def invite_user(request, org_id):
 
         if User.objects.filter(email=email).exists():
             existing_user = User.objects.get(email=email)
-            if UserOrganization.objects.filter(user=existing_user, organization=organization).exist():
+            if UserOrganization.objects.filter(user=existing_user, organization=organization).exists():
                 return Response({
                     'error': 'User ini sudah menjadi anggota organisasi.'
                 }, status=status.HTTP_400_BAD_REQUEST)   
@@ -370,7 +370,7 @@ def invite_user(request, org_id):
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
-def accept_invitaion(request):
+def accept_invitation(request):
     token = request.data.get('token')
 
     if not token:
@@ -397,7 +397,7 @@ def accept_invitaion(request):
             defaults={'role': invitation.role}
         )
 
-        invitaition.is_accepted = True
+        invitation.is_accepted = True
         invitation.save()
 
         return Response({
@@ -412,12 +412,12 @@ def accept_invitaion(request):
 @api_view(['PUT'])
 @permission_classes([permissions.IsAuthenticated])
 def update_member_role(request, org_id, user_id):
-    organization = get_object_or_404(Organization, org_id, user_id)
-    target_user - get_object_or_404(User, user_id=user_id)
+    organization = get_object_or_404(Organization, org_id=org_id)
+    target_user = get_object_or_404(User, user_id=user_id)
 
     try:
         requester_org = UserOrganization.objects.get(user=request.user, organization=organization)
-        if requester_org not in ['admin'] and organization.owner_user != request.user:
+        if requester_org.role not in ['admin'] and organization.owner_user != request.user:
             return Response({
                 'error': 'Hanya admin yang bisa mengubah peran anggota.'
             }, status=status.HTTP_403_FORBIDDEN)
@@ -425,3 +425,65 @@ def update_member_role(request, org_id, user_id):
         return Response({
             'error': 'Acces denied'
         }, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        target_org = UserOrganization.objects.get(user=target_user, organization=organization)
+    except UserOrganization.DoesNotExist:
+        return Response({
+            'error': 'User bukan anggota organisasi.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    if organization.owner_user == target_user:
+        return Response({
+            'error': 'Tidak dapat mengubah peran pemilik organisasi.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    new_role = request.data.get('role')
+    if new_role not in ['admin', 'member', 'viewer']:
+        return Response({
+            'error': 'Peran tidak valid.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    target_org.role = new_role
+    target_org.save()
+
+    return Response({
+        'message': 'Peran anggota berhasil diperbarui.',
+        'user': target_user.email,
+        'new_role': new_role
+    }, status=status.HTTP_200_OK)
+
+@api_view(['DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def remove_member(request, org_id, user_id):
+    organization = get_object_or_404(Organization, org_id=org_id)
+    target_user = get_object_or_404(User, user_id=user_id)
+
+    try:
+        requester_org = UserOrganization.objects.get(user=request.user, organization=organization)
+        if requester_org.role not in ['admin'] and organization.owner_user != request.user:
+            return Response({
+                'error': 'Hanya admin yang bisa menghapus anggota.'
+            }, status=status.HTTP_403_FORBIDDEN)
+    except UserOrganization.DoesNotExist:
+        return Response({
+            'error': 'Acces denied'
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    if organization.owner_user == target_user:
+        return Response({
+            'error': 'Tidak dapat menghapus pemilik organisasi.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        target_org = UserOrganization.objects.get(user=target_user, organization=organization)
+        target_org.delete()
+
+        return Response({
+            'message': 'Anggota berhasil dihapus dari organisasi.',
+        }, status=status.HTTP_200_OK)
+    
+    except UserOrganization.DoesNotExist:
+        return Response({
+            'error': 'User bukan anggota organisasi.'
+        }, status=status.HTTP_400_BAD_REQUEST)

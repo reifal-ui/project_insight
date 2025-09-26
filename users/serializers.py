@@ -99,13 +99,15 @@ class PasswordChangeSerializer(serializers.Serializer):
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
-class passwordResetSerializer(serializers.Serializer):
+# FIX: Nama class harus PascalCase
+class PasswordResetSerializer(serializers.Serializer):  # Bukan passwordResetSerializer
     token = serializers.CharField()
     new_password = serializers.CharField(validators=[validate_password])
     confirm_new_password = serializers.CharField()
 
     def validate(self, attrs):
-        if attrs['new_password'] != attrs ['confirm_new_password']:
+        # FIX: Spasi setelah attrs
+        if attrs['new_password'] != attrs['confirm_new_password']:  # Bukan attrs ['confirm_new_password']
             raise serializers.ValidationError('Password baru tidak cocok.')
         return attrs
     
@@ -117,12 +119,24 @@ class OrganizationSerializer(serializers.ModelSerializer):
         fields = ['org_id', 'name', 'subscription_plan', 'created_at', 'member_count']
         read_only_fields = ['org_id', 'created_at']
 
-        def get_member_count(self, obj):
-            return UserOrganization.objects.filter(organization=obj).count()
+    # FIX: Indentasi - method harus di level class, bukan di dalam Meta
+    def get_member_count(self, obj):
+        return UserOrganization.objects.filter(organization=obj).count()
         
 class OrganizationMemberSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source='user.email', read_only=True)
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+
+    class Meta:
+        # FIX: Model harus UserOrganization, bukan OrganizationInvitation
+        model = UserOrganization  
+        fields = ['user', 'user_email', 'user_name', 'role', 'joined_at']
+        read_only_fields = ['user', 'joined_at']
+
+# TAMBAHAN: Serializer yang hilang untuk invitation
+class OrganizationInvitationSerializer(serializers.ModelSerializer):
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    invited_by_name = serializers.CharField(source='invited_by.get_full_name', read_only=True)
 
     class Meta:
         model = OrganizationInvitation
