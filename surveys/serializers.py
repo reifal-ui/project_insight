@@ -19,7 +19,7 @@ class QuestionSerializer(serializers.ModelSerializer):
         fields = [
             'question_id', 'question_text', 'question_type', 'is_required',
             'order', 'rating_min', 'rating_max', 'rating_min_label',
-            'rating_max_label', 'placehplder_text', 'help_text', 'options'
+            'rating_max_label', 'placeholder_text', 'help_text', 'options'
         ]
         read_only_fields = ['question_id']
 
@@ -196,7 +196,7 @@ class ResponseSerializer(serializers.ModelSerializer):
         seconds = obj.completion_time_seconds % 60
         return f"{minutes}m {seconds}s"
 
-class ResponseSubmissionSerializer(serializers.Serilizer):
+class ResponseSubmissionSerializer(serializers.Serializer):
     respondent_email = serializers.EmailField(required=False, allow_blank=True)
     respondent_name = serializers.CharField(required=False, allow_blank=True)
     answers = serializers.ListField(child=serializers.DictField())

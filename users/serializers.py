@@ -3,6 +3,35 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from .models import User, Organization, UserOrganization, OrganizationInvitation
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        user = self.user
+        data['message'] = "Login Berhasil."
+        data['token'] = data.pop('access')
+        data.pop('refresh', None)
+        orgs = UserOrganization.objects.filter(user=user).select_related('organization')
+        organizations = [
+            {
+                "org_id": uo.organization.org_id,
+                "name": uo.organization.name,
+                "role": uo.role,
+                "subscription_plan": uo.organization.subscription_plan,
+            }
+            for uo in orgs
+        ]
+
+        data['user'] = {
+            "user_id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email_verified": getattr(user, "email_verified", False),
+            "organizations": organizations,
+        }
+        return data
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
@@ -10,7 +39,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'first_name', 'last_name', 'password', 'confirm_password']
+        fields = ['email', 'first_name', 'last_name', 'username', 'password', 'confirm_password']
 
     def validate(self, attrs):
         if attrs['password'] != attrs['confirm_password']:
@@ -99,7 +128,6 @@ class PasswordChangeSerializer(serializers.Serializer):
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
-# FIX: Nama class harus PascalCase
 class PasswordResetSerializer(serializers.Serializer):  # Bukan passwordResetSerializer
     token = serializers.CharField()
     new_password = serializers.CharField(validators=[validate_password])
@@ -118,8 +146,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = ['org_id', 'name', 'subscription_plan', 'created_at', 'member_count']
         read_only_fields = ['org_id', 'created_at']
-
-    # FIX: Indentasi - method harus di level class, bukan di dalam Meta
     def get_member_count(self, obj):
         return UserOrganization.objects.filter(organization=obj).count()
         
@@ -128,12 +154,10 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
 
     class Meta:
-        # FIX: Model harus UserOrganization, bukan OrganizationInvitation
         model = UserOrganization  
         fields = ['user', 'user_email', 'user_name', 'role', 'joined_at']
         read_only_fields = ['user', 'joined_at']
 
-# TAMBAHAN: Serializer yang hilang untuk invitation
 class OrganizationInvitationSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(source='organization.name', read_only=True)
     invited_by_name = serializers.CharField(source='invited_by.get_full_name', read_only=True)

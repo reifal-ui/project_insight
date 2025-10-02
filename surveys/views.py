@@ -1,6 +1,6 @@
 from rest_framework import status, generics, permissions
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
+from rest_framework.response import Response as APIResponse
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
@@ -137,7 +137,7 @@ def duplicate_survey(request, survey_id):
 
     if serializer.is_valid():
         new_survey = serializer.save()
-        return Response({
+        return APIResponse({
             'success': True,
             'message': 'Survey berhasil diduplikasi',
             'data': {
@@ -146,7 +146,7 @@ def duplicate_survey(request, survey_id):
             }
         }, status=status.HTTP_201_CREATED)
     
-    return Response({
+    return APIResponse({
         'success': False,
         'message': 'Gagal menduplikasi survey',
         'errors': serializer.errors
@@ -164,13 +164,13 @@ def publish_survey(request, survey_id):
 
     permission = SurveyPermission()
     if not permission.has_object_permission(request, None, survey):
-        return Response({
+        return APIResponse({
             'success': False,
             'message': 'Tidak memiliki izin untuk mempublikasi survey ini'
         }, status=status.HTTP_403_FORBIDDEN)
     
     if not survey.questions.exists():
-        return Response({
+        return APIResponse({
             'success': False,
             'message': 'Survey harus memiliki minimal 1 pertanyaan'
         }, status=status.HTTP_400_BAD_REQUEST)
@@ -179,7 +179,7 @@ def publish_survey(request, survey_id):
     survey.published_at = timezone.now()
     survey.save(update_fields=['status', 'published_at'])
 
-    return Response({
+    return APIResponse({
         'success': True,
         'message': 'Survey berhasil dipublikasi',
         'data': {
@@ -201,7 +201,7 @@ def close_survey(request, survey_id):
 
     permission = SurveyPermission()
     if not permission.has_object_permission(request, None, survey):
-        return Response({
+        return APIResponse({
             'success': False,
             'message': 'Tidak memiliki izin untuk menutup survey ini'
         }, status=status.HTTP_403_FORBIDDEN)
@@ -212,7 +212,7 @@ def close_survey(request, survey_id):
     analytics, created = SurveyAnalytics.objects.get_or_create(survey=survey)
     analytics.recalculate()
 
-    return Response({
+    return APIResponse({
         'success': True,
         'message': 'Survey berhasil ditutup',
         'data': {
@@ -234,19 +234,19 @@ def get_public_survey(request, share_token):
         )
 
         if not survey.is_active:
-            return Response({
+            return APIResponse({
                 'success': False,
                 'message': 'Survey tidak tersedia saat ini'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         serializer = SurveyPublicSerializer(survey)
-        return Response({
+        return APIResponse({
             'success': True,
             'data': serializer.data
         }, status=status.HTTP_200_OK)
     
     except Survey.DoesNotExist:
-        return Response({
+        return APIResponse({
             'success': False,
             'message': 'Survey tidak ditemukan'
         }, status=status.HTTP_404_NOT_FOUND)
@@ -262,7 +262,7 @@ def submit_survey_response(request, share_token):
         )
 
         if not survey.is_active:
-            return Response({
+            return APIResponse({
                 'success': False,
                 'message': 'Survey tidak menerima respon saat ini'
             }, status=status.HTTP_400_BAD_REQUEST)
@@ -278,7 +278,7 @@ def submit_survey_response(request, share_token):
                 analytics, created = SurveyAnalytics.objects.get_or_create(survey=survey)
                 analytics.recalculate()
             
-            return Response({
+            return APIResponse({
                 'success': True,
                 'message': 'Respon berhasil dikirim',
                 'data': {
@@ -287,14 +287,14 @@ def submit_survey_response(request, share_token):
                 }
             }, status=status.HTTP_201_CREATED)
         
-        return Response({
+        return APIResponse({
             'success': False,
             'message': 'Data tidak valid',
             'errors': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
     
     except Survey.DoesNotExist:
-        return Response({
+        return APIResponse({
             'success': False,
             'message': 'Survey tidak ditemukan'
         }, status=status.HTTP_404_NOT_FOUND)
@@ -400,7 +400,7 @@ def survey_analytics(request, survey_id):
         
         question_analytics.append(question_data)
     
-    return Response({
+    return APIResponse({
         'success': True,
         'data': {
             'survey_analytics': basic_analytics,
@@ -456,7 +456,7 @@ def export_survey_responses(request, survey_id):
         return response
     else:
         serializer = ResponseSerializer(responses, many=True)
-        return Response({
+        return APIResponse({
             'success': True,
             'data': {
                 'survey_title': survey.title,

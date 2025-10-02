@@ -15,7 +15,13 @@ from .serializers import (
     PasswordChangeSerializer, PasswordResetRequestSerializer, PasswordResetSerializer,
     OrganizationSerializer, OrganizationMemberSerializer, OrganizationInvitationSerializer
 )
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
 # Create your views here.
+
+class CustomLoginView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
 
 def get_client_ip(request):
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')

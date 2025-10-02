@@ -19,18 +19,18 @@ class Survey(models.Model):
 
     survey_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
-    description = [ models.TextField(blank=True, null=True)]
+    description = models.TextField(blank=True, null=True)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='surveys')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_surveys')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     is_public = models.BooleanField(default=True)
     allow_anonymous = models.BooleanField(default=True)
-    collect_enail = models.BooleanField(default=False)
+    collect_email = models.BooleanField(default=False)
     published_at = models.DateTimeField(blank=True, null=True)
     closes_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    share_roken = models.CharField(max_length=64, unique=True, blank=True)
+    share_token = models.CharField(max_length=64, unique=True, blank=True)
 
     class Meta:
         db_table = 'surveys'
@@ -40,7 +40,7 @@ class Survey(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.share_token:
-            self.share_Token = secrets.token_urlsafe(32)
+            self.share_token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
     
     def __str__(self):
@@ -51,7 +51,7 @@ class Survey(models.Model):
         now = timezone.now()
         if self.status != 'active':
             return False
-        if self.published_at and self.publisged_at > now:
+        if self.published_at and self.published_at > now:
             return False
         if self.closes_at and self.closes_at < now:
             return False
@@ -100,7 +100,7 @@ class Question(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        db_table = 'questions',
+        db_table = 'questions'
         verbose_name = 'Question'
         verbose_name_plural = 'Questions'
         ordering = ['survey', 'order']
@@ -111,12 +111,12 @@ class Question(models.Model):
 class QuestionOption(models.Model):
     option_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='options')
-    option_text = models.Charfield(max_length=255)
+    option_text = models.CharField(max_length=255)
     option_value = models.CharField(max_length=255, blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
-        db_table = 'quwestion_options'
+        db_table = 'question_options'
         verbose_name = 'Question Option'
         verbose_name_plural = 'Question Options'
         ordering = ['question', 'order']
@@ -158,8 +158,8 @@ class ResponseAnswer(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     answer_text = models.TextField(blank=True, null=True)
     answer_number = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    answer_date = models.DataField(blank=True, null=True)
-    answer_booleran = models.BooleanField(blank=True, null=True)
+    answer_date = models.DateField(blank=True, null=True)
+    answer_boolean = models.BooleanField(blank=True, null=True)
     selected_options = models.ManyToManyField(QuestionOption, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
