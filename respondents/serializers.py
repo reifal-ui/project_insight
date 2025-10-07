@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from .models import ContactList, Contact, ContactImport, SurveyInvitation, EmailTemplate
+from .models import ContactList, Contact, ContactImport, SurveyInvitation, EmailTemplate, EmailCampaign, InvitationTracking
 import csv
 import io
 from surveys.models import Survey
@@ -315,3 +315,80 @@ class BulkInvitationSerializer(serializers.Serializer):
             return template
         except EmailTemplate.DoesNotExist:
             raise serializers.ValidationError("Email template tidak ditemukan")
+        
+class EmailCampaignSerializer(serializers.ModelSerializer):
+    delivery_rate = serializers.ReadOnlyField()
+    open_rate = serializers.ReadOnlyField()
+    click_rate = serializers.ReadOnlyField()
+    survey_title = serializers.CharField(source='survey.title', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+
+    class Meta:
+        model = EmailCampaign
+        fields = [
+            'campaign_id', 'name', 'survey', 'survey_title', 'status',
+            'contact_lists', 'subject_line', 'message_body', 'sender_name',
+            'sender_email', 'scheduled_at', 'total_recipients', 'emails_sent',
+            'emails_delivered', 'emails_opened', 'emails_clicked', 'emails_failed',
+            'delivery_rate', 'open_rate', 'click_rate', 'created_by_name',
+            'created_at', 'started_at', 'completed_at'
+        ]
+        read_only_fields = [
+            'campaign_id', 'total_recipients', 'emails_sent',
+            'emails_delivered', 'emails_opened', 'emails_clicked',
+            'emails_failed', 'created_at', 'started_at', 'completed_at'
+        ]
+
+class EmailCampaignCreateSerializer(serializers.ModelSerializer):
+    contact_list_ids = serializers.ListField(
+        child = serializers.UUIDField(),
+        write_only = True
+    )
+
+    class Meta:
+        model = EmailCampaign
+        fields = [
+            'name', 'survey', 'email_template', 'subject_line', 'message_body',
+            'sender_name', 'sender_email', 'scheduled_at', 'contact_list_ids'
+        ]
+    
+    def validate_survey(self, value):
+        if value.status != 'active':
+            raise serializers.ValidationError("Survey harus dalam status active!")
+        return value
+    
+    def create(self, validated_data):
+        contact_list_ids = validated_data.pop('contact_list_ids')
+        organization = self.contect['organization']
+        user = self.context['user']
+        campaign = EmailCampaign.objects.create(
+            organization = organization,
+            created_by = user,
+            status = 'draft',
+            **validated_data
+        )
+        contact_lists = ContactList.objects.filter(
+            list_id__in = contact_list_ids,
+            organization = organization
+        )
+        campaign.contact_lists.set(contact_lists)
+        total = Contact.objects.filter(
+            contact_lists__in = contact_lists,
+            is_active = True,
+            status = 'subscribed'
+        ).distinct().count()
+        campaign.total_recipients = total
+        campaign.save()
+
+        return campaign
+
+class InvitationTrackingSerializer(serializers.ModelSerializer):
+    contact_email = serializers.CharField(source='invitation.contact.email', read_only=True)
+
+    class Meta:
+        model = InvitationTracking
+        fields = [
+            'tracking_id', 'contact_email', 'opened_count', 'clicked_count',
+            'first_opened_at', 'last_opened_at', 'first_clicked_at',
+            'last_clicked_at', 'user_agent', 'ip_address'
+        ]

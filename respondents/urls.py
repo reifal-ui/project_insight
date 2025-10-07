@@ -13,4 +13,10 @@ urlpatterns = [
     path('invitations/', views.SurveyInvitationView.as_view(), name='survey-invitations'),
     path('invitations/send-bulk/', views.send_bulk_invitations, name='send-bulk-invitations'),
     path('statistics/', views.contact_statistics, name='contact-statistics'),
+    path('campaigns/', views.EmailCampaignListView.as_view(), name='campaign-list-create'),
+    path('campaigns/<uuid:campaign_id>/', views.EmailCampaignDetailView.as_view(), name='campaign-detail'),
+    path('campaigns/<uuid:campaign_id>/send/', views.send_campaign, name='send-campaign'),
+    path('campaigns/<uuid:campaign_id>/analytics/', views.campaign_analytics, name='campaign-analytics'),
+    path('track/open/<str:tracking_token>/', views.track_email_open, name='track-email-open'),
+    path('track/click/<str:tracking_token>/', views.track_link_click, name='track-link-click'),
 ]

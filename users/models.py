@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 import secrets
+import hashlib
 
 class User(AbstractUser):
     user_id = models.AutoField(primary_key=True)
@@ -125,3 +126,111 @@ class OrganizationInvitation(models.Model):
     
     def __str__(self):
         return f"Invitation for {self.email} to {self.organization.name}"
+
+class APIKey(models.Model):
+    key_id = models.CharField(max_length=32, primary_key=True)
+    organization = models.ForeignKey('Organization', on_delete=models.CASCADE, related_name='api_keys')
+    name = models.CharField(max_length=255)
+    key_hash = models.CharField(max_length=64, unique=True)
+    key_prefix = models.CharField(max_length=8)
+    can_read = models.BooleanField(default=True)
+    can_write = models.BooleanField(default=True)
+    can_delete = models.BooleanField(default=False)
+    rate_limit = models.IntegerField(default=1000, help_text="Requests per hour")
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey('User', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'api_keys'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.key_prefix}...)"
+    
+    @staticmethod
+    def generate_key():
+        raw_key = secrets.token_urlsafe(32)
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        key_prefix = raw_key[:8]
+        key_id = secrets.token_hex(16)
+        return raw_key, key_hash, key_prefix, key_id
+    
+    def verify_key(self, raw_key):
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        return key_hash == self.key_hash
+
+class APIUsageLog(models.Model):
+    log_id = models.BigAutoField(primary_key=True)
+    api_key = models.ForeignKey(APIKey, on_delete=models.CASCADE, related_name='usage_logs')
+    endpoint = models.CharField(max_length=255)
+    method = models.CharField(max_length=10)
+    status_code = models.IntegerField()
+    response_time_ms = models.IntegerField()
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+    ip_address = models.GenericIPAddressField()
+    user_agent = models.TextField(blank=True)
+    
+    class Meta:
+        db_table = 'api_usage_logs'
+        ordering = ['-timestamp']
+
+class Webhook(models.Model):
+    EVENT_CHOICES = [
+        ('response.new', 'New Survey Response'),
+        ('survey.published', 'Survey Published'),
+        ('survey.closed', 'Survey Closed'),
+        ('contact.created', 'Contact Created'),
+    ]
+    
+    webhook_id = models.CharField(max_length=32, primary_key=True)
+    organization = models.ForeignKey('Organization', on_delete=models.CASCADE, related_name='webhooks')
+    url = models.URLField(max_length=500)
+    events = models.JSONField(default=list)
+    secret = models.CharField(max_length=64)
+    is_active = models.BooleanField(default=True)
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
+    failure_count = models.IntegerField(default=0)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_failure_reason = models.TextField(blank=True)
+    created_by = models.ForeignKey('User', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        db_table = 'webhooks'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Webhook to {self.url}"
+    
+    def save(self, *args, **kwargs):
+        if not self.webhook_id:
+            self.webhook_id = secrets.token_hex(16)
+        if not self.secret:
+            self.secret = secrets.token_hex(32)
+        super().save(*args, **kwargs)
+
+class WebhookDelivery(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+    ]
+    
+    delivery_id = models.BigAutoField(primary_key=True)
+    webhook = models.ForeignKey(Webhook, on_delete=models.CASCADE, related_name='deliveries')
+    event_type = models.CharField(max_length=50)
+    payload = models.JSONField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status_code = models.IntegerField(null=True, blank=True)
+    response_body = models.TextField(blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    retry_count = models.IntegerField(default=0)
+    
+    class Meta:
+        db_table = 'webhook_deliveries'
+        ordering = ['-created_at']

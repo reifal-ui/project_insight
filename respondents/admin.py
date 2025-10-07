@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ContactList, Contact, ContactImport, SurveyInvitation, EmailTemplate
+from .models import ContactList, Contact, ContactImport, SurveyInvitation, EmailTemplate, EmailCampaign, InvitationTracking
 
 @admin.register(ContactList)
 class ContactListAdmin(admin.ModelAdmin):
@@ -43,3 +43,28 @@ class EmailTemplateAdmin(admin.ModelAdmin):
     list_filter = ['template_type', 'is_default', 'is_active', 'organization']
     search_fields = ['name', 'subject_line', 'organization__name']
     readonly_fields = ['template_id', 'created_at', 'updated_at']
+
+@admin.register(EmailCampaign)
+class EmailCampaignAdmin(admin.ModelAdmin):
+    list_display = ['name', 'survey', 'status', 'total_recipients', 'emails_sent', 
+                   'open_rate', 'click_rate', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['name', 'survey__title']
+    readonly_fields = ['campaign_id', 'total_recipients', 'emails_sent', 
+                      'emails_delivered', 'emails_opened', 'emails_clicked', 
+                      'emails_failed', 'created_at', 'started_at', 'completed_at']
+    filter_horizontal = ['contact_lists']
+    
+    def open_rate(self, obj):
+        return f"{obj.open_rate}%"
+    
+    def click_rate(self, obj):
+        return f"{obj.click_rate}%"
+
+@admin.register(InvitationTracking)
+class InvitationTrackingAdmin(admin.ModelAdmin):
+    list_display = ['invitation', 'campaign', 'opened_count', 'clicked_count', 
+                   'first_opened_at', 'first_clicked_at']
+    list_filter = ['campaign', 'first_opened_at']
+    search_fields = ['invitation__contact__email']
+    readonly_fields = ['tracking_id']

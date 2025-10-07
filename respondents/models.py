@@ -281,3 +281,91 @@ Best regards,
     )
 
     return [invitation_template, reminder_template]
+
+class EmailCampaign(models.Model):
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('scheduled', 'Scheduled'),
+        ('sending', 'Sending'),
+        ('sent', 'Sent'),
+        ('paused', 'Paused'),
+        ('failed', 'Failed'),
+    ]
+
+    campaign_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    survey = models.ForeignKey('surveys.Survey', on_delete=models.CASCADE, related_name='campaigns')
+    organization = models.ForeignKey('users.Organization', on_delete=models.CASCADE)
+    contact_lists = models.ManyToManyField('ContactList', blank=True)
+    email_template = models.ForeignKey('EmailTemplate', on_delete=models.SET_NULL, null=True)
+    subject_line = models.CharField(max_length=255)
+    message_body = models.TextField()
+    sender_name = models.CharField(max_length=255)
+    sender_email = models.EmailField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    total_recipients = models.IntegerField(default=0)
+    emails_sent = models.IntegerField(default=0)
+    emails_delivered = models.IntegerField(default=0)
+    emails_opened = models.IntegerField(default=0)
+    emails_clicked = models.IntegerField(default=0)
+    emails_failed = models.IntegerField(default=0)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(default=timezone.now)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'email_campaigns'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} - {self.status}"
+    
+    @property
+    def open_rate(self):
+        if self.emails_delivered == 0:
+            return 0
+        return round((self.emails_opened / self.emails_delivered) * 100, 2)
+    
+    @property
+    def click_rate(self):
+        if self.emails_delivered == 0:
+            return 0
+        return round((self.emails_clicked / self.emails_delivered) * 100, 2)
+
+class InvitationTracking(models.Model):
+    tracking_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invitation = models.OneToOneField('SurveyInvitation', on_delete=models.CASCADE, related_name='tracking')
+    campaign = models.ForeignKey(EmailCampaign, on_delete=models.CASCADE, null=True, blank=True)
+    opened_count = models.IntegerField(default=0)
+    clicked_count = models.IntegerField(default=0)
+    first_opened_at = models.DateTimeField(null=True, blank=True)
+    last_opened_at = models.DateTimeField(null=True, blank=True)
+    first_clicked_at = models.DateTimeField(null=True, blank=True)
+    last_clicked_at = models.DateTimeField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'invitation_tracking'
+    
+    def record_open(self, user_agent=None, ip_address=None):
+        now = timezone.now()
+        if not self.first_opened_at:
+            self.fitst_opened_at = now
+        self.last_opened_at = now
+        self.opened_count += 1
+        if user_agent:
+            self.user_agent = user_agent
+        if ip_address:
+            self.ip_address = ip_address
+        self.save()
+
+    def record_click(self):
+        now = timezone.now()
+        if not self.first_clicked_at:
+            self.first_clicked_at = now
+        self.last_clicked_at = now
+        self.clicked_count += 1
+        self.save()
