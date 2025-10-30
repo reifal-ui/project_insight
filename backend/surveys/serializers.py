@@ -28,7 +28,7 @@ class QuestionSerializer(serializers.ModelSerializer):
         question = Question.objects.create(**validated_data)
 
         for option_data in options_data:
-            QuestionOption.objects.create(**validated_data)
+            QuestionOption.objects.create(question = question, **option_data)
         
         return question
     
@@ -187,7 +187,7 @@ class ResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Response
         fields = [
-            'response_id', 'respondent_email', 'respondendt_name',
+            'response_id', 'respondent_email', 'respondent_name',
             'is_completed', 'submitted_at', 'started_at',
             'completion_time_seconds', 'completion_time_formatted', 'answers'
         ]
@@ -211,7 +211,7 @@ class ResponseSubmissionSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Each answer must have a question_id")
             
             answer_fields = [
-                'answer_text', 'answer_number', 'answer_Date', 'answer_boolean', 'selected_option_ids'
+                'answer_text', 'answer_number', 'answer_date', 'answer_boolean', 'selected_option_ids'
             ]
             if not any(field in answer for field in answer_fields):
                 raise serializers.ValidationError("Each answer must have at least one answer field")
@@ -290,7 +290,7 @@ class SurveyDuplicateSerializer(serializers.Serializer):
                 is_required=question.is_required,
                 order=question.order,
                 rating_min=question.rating_min,
-                rating_mxa=question.rating_max,
+                rating_max=question.rating_max,
                 rating_min_label=question.rating_min_label,
                 rating_max_label=question.rating_max_label,
                 placeholder_text=question.placeholder_text,
@@ -300,7 +300,7 @@ class SurveyDuplicateSerializer(serializers.Serializer):
             for option in question.options.all():
                 QuestionOption.objects.create(
                     question=new_question,
-                    question_text=option.option_text,
+                    option_text=option.option_text,
                     option_value=option.option_value,
                     order=option.order
                 )

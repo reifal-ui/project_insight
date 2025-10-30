@@ -245,20 +245,24 @@ function CreateSurveyModal({
 
 function ActionMenu({ 
   surveyId, 
-  status, 
+  status,
+  isPublic,
   shareToken,
   onDelete, 
   onPublish, 
   onClose,
-  onDuplicate
+  onDuplicate,
+  onTogglePublic
 }: {
   surveyId: string;
   status: string;
+  isPublic: boolean;
   shareToken?: string;
   onDelete: (id: string) => void;
   onPublish: (id: string) => void;
   onClose: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onTogglePublic: (id: string, currentValue: boolean) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -297,7 +301,7 @@ function ActionMenu({
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
-          {status === "active" && shareToken && (
+          {status === "active" && shareToken && isPublic && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -305,9 +309,23 @@ function ActionMenu({
               }}
               className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
             >
-              Copy Link
+              📋 Copy Link
             </button>
           )}
+          
+          {status === "active" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePublic(surveyId, isPublic);
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              {isPublic ? "🔒 Make Private" : "🌐 Make Public"}
+            </button>
+          )}
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -318,6 +336,7 @@ function ActionMenu({
           >
             Duplicate
           </button>
+          
           {status === "draft" && (
             <button
               onClick={(e) => {
@@ -327,9 +346,10 @@ function ActionMenu({
               }}
               className="w-full text-left px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
             >
-              Publish
+              📢 Publish
             </button>
           )}
+          
           {status === "active" && (
             <button
               onClick={(e) => {
@@ -342,6 +362,20 @@ function ActionMenu({
               Close Survey
             </button>
           )}
+
+          {status === "closed" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublish(surveyId);
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
+            >
+              🔄 Re-activate
+            </button>
+          )}
+          
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -528,6 +562,34 @@ export default function SurveyListPage() {
       fetchSurveys();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to duplicate survey";
+      toast.error(errorMessage, { id: loadingToast });
+    }
+  };
+
+  const handleTogglePublic = async (surveyId: string, currentValue: boolean) => {
+    const loadingToast = toast.loading(currentValue ? "Making private..." : "Making public...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/surveys/${surveyId}/`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          is_public: !currentValue,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || errorData.detail || "Failed to update survey");
+      }
+
+      toast.success(currentValue ? "Survey is now private!" : "Survey is now public!", { id: loadingToast });
+      fetchSurveys();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to update survey";
       toast.error(errorMessage, { id: loadingToast });
     }
   };
@@ -723,11 +785,13 @@ export default function SurveyListPage() {
                     <ActionMenu
                       surveyId={survey.survey_id}
                       status={survey.status}
+                      isPublic={survey.is_public}
                       shareToken={survey.share_token}
                       onDelete={handleDelete}
                       onPublish={handlePublish}
                       onClose={handleCloseSurvey}
                       onDuplicate={handleDuplicate}
+                      onTogglePublic={handleTogglePublic}
                     />
                   </div>
 

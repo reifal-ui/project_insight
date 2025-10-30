@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from users.models import Organization, User
 from surveys.models import Survey
-import uuid
+import uuid, secrets
 from django.conf import settings
 
 # Create your models here.
@@ -80,7 +80,7 @@ class Contact(models.Model):
         return ""
     
     @property
-    def displat_name(self):
+    def display_name(self):
         return self.get_full_name() or self.email
     
     def can_receive_surveys(self):
@@ -163,8 +163,7 @@ class SurveyInvitation(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.tracking_token:
-            import secrets
-            self.tracking_token = self.token_urlsafe(32)
+            self.tracking_token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
     
     def __str__(self):
@@ -302,7 +301,6 @@ class EmailCampaign(models.Model):
     message_body = models.TextField()
     sender_name = models.CharField(max_length=255)
     sender_email = models.EmailField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     scheduled_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20,
@@ -359,7 +357,7 @@ class InvitationTracking(models.Model):
     def record_open(self, user_agent=None, ip_address=None):
         now = timezone.now()
         if not self.first_opened_at:
-            self.fitst_opened_at = now
+            self.first_opened_at = now
         self.last_opened_at = now
         self.opened_count += 1
         if user_agent:

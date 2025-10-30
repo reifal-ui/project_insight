@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Sum
 from django.db import transaction
 from django.core.mail import send_mail
 from django.conf import settings
@@ -63,7 +63,7 @@ class ContactListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        org_id = self.request_params.get('organization')
+        org_id = self.request.query_params.get('organization')
         user_orgs = UserOrganization.objects.filter(user=user).values_list('organization_id', flat=True)
         queryset = ContactList.objects.filter(organization_id__in=user_orgs)
 
@@ -77,7 +77,7 @@ class ContactListView(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         org_id = self.request.data.get('organization_id')
-        organization = get_user_organization(self.reqyest.user, org_id)
+        organization = get_user_organization(self.request.user, org_id)
 
         serializer.save(
             organization=organization,
@@ -127,7 +127,7 @@ class ContactView(generics.ListCreateAPIView):
                 Q(last_name__icontains=search) |
                 Q(company__icontains=search)
             )
-        return queryset.elect_related('organization', 'created_by').prefetch_related('contact_lists')
+        return queryset.select_related('organization', 'created_by').prefetch_related('contact_lists')
     
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -143,7 +143,7 @@ class ContactDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         user_orgs = UserOrganization.objects.filter(
-            user=self.reqeust.user
+            user=self.request.user
         ).values_list('organization_id', flat=True)
 
         return Contact.objects.filter(
@@ -387,6 +387,8 @@ class SurveyInvitationView(generics.ListAPIView):
 def contact_statistics(request):
     org_id = request.query_params.get('organization')
     organization = get_user_organization(request.user, org_id)
+    
+    # Basic stats
     total_contacts = Contact.objects.filter(organization=organization).count()
     active_contacts = Contact.objects.filter(organization=organization, is_active=True).count()
     subscribed_contacts = Contact.objects.filter(
@@ -394,24 +396,88 @@ def contact_statistics(request):
         status='subscribed', 
         is_active=True
     ).count()
+    
+    # Status breakdown
     status_breakdown = Contact.objects.filter(
         organization=organization
     ).values('status').annotate(count=Count('status'))
+    
+    # Contact lists count
     contact_lists_count = ContactList.objects.filter(organization=organization).count()
+    
+    # Recent imports
     recent_imports = ContactImport.objects.filter(
         organization=organization
     ).order_by('-started_at')[:5]
     recent_imports_data = ContactImportResultSerializer(recent_imports, many=True).data
     
+    # Recent invitations sent
+    recent_invitations = SurveyInvitation.objects.filter(
+        survey__organization=organization
+    ).select_related('survey', 'contact').order_by('-created_at')[:10]
+    
+    invitation_data = []
+    for inv in recent_invitations:
+        invitation_data.append({
+            'invitation_id': str(inv.invitation_id),
+            'contact_email': inv.contact.email,
+            'survey_title': inv.survey.title,
+            'status': inv.status,
+            'sent_at': inv.sent_at.isoformat() if inv.sent_at else None
+        })
+    
+    # Email campaign stats
+    total_campaigns = EmailCampaign.objects.filter(organization=organization).count()
+    sent_campaigns = EmailCampaign.objects.filter(
+        organization=organization,
+        status='sent'
+    ).count()
+    
+    # Aggregate email stats
+    email_stats = EmailCampaign.objects.filter(
+        organization=organization,
+        status='sent'
+    ).aggregate(
+        total_sent=Sum('emails_sent'),
+        total_opened=Sum('emails_opened'),
+        total_clicked=Sum('emails_clicked')
+    )
+    
+    open_rate = 0
+    click_rate = 0
+    if email_stats['total_sent'] and email_stats['total_sent'] > 0:
+        open_rate = round((email_stats['total_opened'] or 0) / email_stats['total_sent'] * 100, 2)
+        click_rate = round((email_stats['total_clicked'] or 0) / email_stats['total_sent'] * 100, 2)
+    
     return APIResponse({
         'success': True,
         'data': {
-            'total_contacts': total_contacts,
-            'active_contacts': active_contacts,
-            'subscribed_contacts': subscribed_contacts,
-            'contact_lists_count': contact_lists_count,
-            'status_breakdown': list(status_breakdown),
-            'recent_imports': recent_imports_data
+            'contacts': {
+                'total': total_contacts,
+                'active': active_contacts,
+                'subscribed': subscribed_contacts,
+                'status_breakdown': list(status_breakdown)
+            },
+            'contact_lists': {
+                'total': contact_lists_count
+            },
+            'imports': {
+                'recent': recent_imports_data
+            },
+            'invitations': {
+                'recent': invitation_data
+            },
+            'campaigns': {
+                'total': total_campaigns,
+                'sent': sent_campaigns,
+                'email_stats': {
+                    'total_sent': email_stats['total_sent'] or 0,
+                    'total_opened': email_stats['total_opened'] or 0,
+                    'total_clicked': email_stats['total_clicked'] or 0,
+                    'open_rate': open_rate,
+                    'click_rate': click_rate
+                }
+            }
         }
     }, status=status.HTTP_200_OK)
 
@@ -429,7 +495,7 @@ class EmailCampaignListView(generics.ListCreateAPIView):
         ).values_list('organization_id', flat=True)
 
         return EmailCampaign.objects.filter(
-            orgganization_id__in = user_orgs
+            organization_id__in = user_orgs
         ).select_related('survey', 'created_by').order_by('-created_at')
     
     def get_serializer_context(self):
@@ -618,7 +684,7 @@ def track_email_open(request, tracking_token):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def track_link_click(tracking_token):
+def track_link_click(requset, tracking_token):
     try:
         invitation = SurveyInvitation.objects.get(tracking_token=tracking_token)
         tracking = InvitationTracking.objects.get_or_create(

@@ -42,15 +42,14 @@ class ContactSerializer(serializers.ModelSerializer):
         organization = self.context.get('organization')
         contact_id = self.instance.contact_id if self.instance else None
         existing = Contact.objects.filter(
-            organization=organization,
-            email=value
+            organization = organization,
+            email = value
         )
 
         if contact_id:
-            existing = existing.exclude(contact_id=contact_id)
-        
+            existing = existing.exclude(contact_id = contact_id)
         if existing.exists():
-            return serializers.ValidationError("Email sudah ada dalam organisasi ini")
+            raise serializers.ValidationError("Email sudah dalam organisasi ini")
         
         return value.lower().strip()
     
@@ -74,7 +73,7 @@ class ContactSerializer(serializers.ModelSerializer):
         return contact
     
     def update(self, instance, validated_data):
-        contact_list_ids = validated_data.pop('contact_list_id', None)
+        contact_list_ids = validated_data.pop('contact_list_ids', None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -179,7 +178,7 @@ class ContactImportSerializer(serializers.Serializer):
                                     setattr(existing_contact, key, value)
                             existing_contact.save()
 
-                            if not existing_contact.contact_lists.fillter(list_id=contact_list.list_id).exists():
+                            if not existing_contact.contact_lists.filter(list_id=contact_list.list_id).exists():
                                 existing_contact.contact_lists.add(contact_list)
                             
                             successful_imports += 1
@@ -203,7 +202,7 @@ class ContactImportSerializer(serializers.Serializer):
             import_record.processed_rows = total_rows
             import_record.successful_imports = successful_imports
             import_record.failed_imports = failed_imports
-            import_record.duplicate_emails = duplicate_emails
+            import_record.duplicate_imports = duplicate_emails
             import_record.error_log = errors
             import_record.status = 'completed' if failed_imports == 0 else 'partial'
             import_record.completed_at = timezone.now()
@@ -359,7 +358,7 @@ class EmailCampaignCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         contact_list_ids = validated_data.pop('contact_list_ids')
-        organization = self.contect['organization']
+        organization = self.context['organization']
         user = self.context['user']
         campaign = EmailCampaign.objects.create(
             organization = organization,

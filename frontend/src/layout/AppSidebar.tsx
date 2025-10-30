@@ -47,7 +47,7 @@ const navItems: NavItem[] = [
   {
     name: "Survey Management",
     icon: <ListIcon />,
-    subItems: [{ name: "Survey", path: "form-elements", pro: false, }, {name: "Response", path: "calendar", pro: false}],
+    subItems: [{ name: "Survey", path: "form-elements", pro: false, }, {name: "Respondents", path: "calendar", pro: false}],
   },
   {
     icon: <UserCircleIcon />,

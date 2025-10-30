@@ -14,4 +14,8 @@ urlpatterns = [
     path('<uuid:survey_id>/responses/', views.SurveyResponseListView.as_view(), name='survey-responses'),
     path('<uuid:survey_id>/analytics/', views.survey_analytics, name='survey-analytics'),
     path('<uuid:survey_id>/export/', views.export_survey_responses, name='export-responses'),
+    path('<uuid:survey_id>/schedule/', views.schedule_survey, name='schedule-survey'),
+    path('<uuid:survey_id>/cancel-schedule/', views.cancel_schedule, name='cancel-schedule'),
+    path('dashboard/', views.dashboard_overview, name='dashboard-overview'),
+    path('<uuid:survey_id>/response-rate/', views.survey_response_rate, name='survey-response-rate'),
 ]
