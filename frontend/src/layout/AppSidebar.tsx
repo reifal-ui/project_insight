@@ -4,7 +4,6 @@ import { Link, useLocation } from "react-router";
 // Assume these icons are imported from an icon library
 import {
   BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
@@ -42,12 +41,15 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: "/TailAdmin/", pro: false }],
+    path: "/TailAdmin/",
   },
   {
     name: "Survey Management",
     icon: <ListIcon />,
-    subItems: [{ name: "Survey", path: "form-elements", pro: false, }, {name: "Respondents", path: "calendar", pro: false}],
+    subItems: [
+      { name: "All Surveys", path: "surveys", pro: false },
+      { name: "Scheduler", path: "calendar", pro: false },
+    ],
   },
   {
     icon: <UserCircleIcon />,
@@ -55,16 +57,18 @@ const navItems: NavItem[] = [
     path: "profile",
   },
   {
-    name: "Tim",
+    name: "Team",
     icon: <TableIcon />,
-    subItems: [{ name: "Teams", path: "basic-tables", pro: false }],
+    subItems: [
+      { name: "Team Members", path: "teams", pro: false },
+    ],
   },
   {
     name: "Integrations",
     icon: <PageIcon />,
     subItems: [
-      { name: "Webhook", path: "blank", pro: false },
-      { name: "API Key", path: "error-404", pro: false },
+      { name: "Webhooks", path: "integrations/webhook", pro: false },
+      { name: "API Keys", path: "integrations/api", pro: false },
     ],
   },
 ];
