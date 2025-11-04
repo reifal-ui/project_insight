@@ -196,3 +196,56 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
         model = WebhookDelivery
         fields = ['delivery_id', 'event_type', 'status', 'status_code', 
                  'created_at', 'delivered_at', 'retry_count', 'error_message']
+        
+class SubscriptionPlanSerializer(serializers.Serializer):
+    plan_name = serializers.CharField()
+    display_name = serializers.CharField()
+    price = serializers.DecimalField(max_digits = 10, decimal_places = 2)
+    surveys_per_month = serializers.CharField()
+    responses_per_survey = serializers.CharField()
+    team_members = serializers.IntegerField()
+    features = serializers.ListField(child = serializers.CharField())
+
+class OrganizationSubscriptionSerializer(serializers.ModelSerializer):
+    survey_limit = serializers.SerializerMethodField()
+    surveys_used = serializers.IntegerField()
+    response_limit = serializers.SerializerMethodField()
+    team_limit = serializers.SerializerMethodField()
+    current_team_count = serializers.SerializerMethodField()
+    available_features = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Organization
+        fields = [
+            'org_id', 'name', 'subscription_plan', 'subscription_status',
+            'trial_ends_at', 'subscription_expires_at',
+            'survey_limit', 'surveys_used', 'response_limit',
+            'team_limit', 'current_team_count', 'available_features'
+        ]
+    
+    def get_survey_limit(self, obj):
+        limit = obj.get_survey_limit()
+        return 'Unlimited' if limit is None else limit
+    
+    def get_response_limit(self, obj):
+        return obj.get_response_limit()
+    
+    def get_team_limit(self, obj):
+        return obj.get_team_member_limit()
+    
+    def get_current_team_count(self, obj):
+        return UserOrganization.objects.filter(organization=obj).count()
+    
+    def get_available_features(self, obj):
+        all_features = [
+            'basic_surveys', 'csv_export', 'json_export', 'pdf_export',
+            'custom_branding', 'white_labeling', 'conditional_logic',
+            'api_access', 'webhooks', 'email_support', 'priority_support',
+            'custom_integrations'
+        ]
+        return [f for f in all_features if obj.has_feature(f)]
+
+class SubscriptionChangeSerializer(serializers.Serializer):
+    new_plan = serializers.ChoiceField(
+        choices = ['starter', 'pro', 'enterprise']
+    )

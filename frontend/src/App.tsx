@@ -16,10 +16,13 @@ import BasicTables from "./pages/Tables/BasicTables";
 import FormElements from "./pages/Forms/FormElements";
 import SurveyEditPage from "./components/form/form-elements/SurveyEditPage";
 import PublicSurveyPage from "./components/form/form-elements/PublicSurveyPage";
+<<<<<<< HEAD
 import SurveyResponsesPage from "./pages/Survey/SurveyResponsesPage";
 import DistributionPage from "./pages/Survey/DistributionPage";
 import ApiManagementPage from "./pages/Integration/ApiManagementPage";
 import WebhookManagementPage from "./pages/Integration/WebhookManagementPage";
+=======
+>>>>>>> f163a3e (FE DAN BE FIX)
 import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
@@ -40,8 +43,11 @@ export default function App() {
             {/* Survey Management */}
             <Route path="surveys" element={<FormElements />} />
             <Route path="surveys/:surveyId" element={<SurveyEditPage />} />
+<<<<<<< HEAD
             <Route path="surveys/:surveyId/responses" element={<SurveyResponsesPage />} />
             <Route path="surveys/:surveyId/distribution" element={<DistributionPage />} />
+=======
+>>>>>>> f163a3e (FE DAN BE FIX)
             
             {/* Calendar for scheduling */}
             <Route path="calendar" element={<Calendar />} />
@@ -50,9 +56,12 @@ export default function App() {
             <Route path="teams" element={<BasicTables />} />
             
             {/* Integrations */}
+<<<<<<< HEAD
             <Route path="integrations/api" element={<ApiManagementPage />} />
             <Route path="integrations/webhook" element={<WebhookManagementPage />} />
             
+=======
+>>>>>>> f163a3e (FE DAN BE FIX)
             {/* Other pages */}
             <Route path="blank" element={<Blank />} />
             

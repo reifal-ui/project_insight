@@ -8,14 +8,17 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from datetime import timedelta
 from django.db import transaction
 from django.db.models import Q
+from surveys.models import Survey
 from .models import User, Organization, UserOrganization, OrganizationInvitation, APIKey, Webhook, WebhookDelivery
 from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer,
     PasswordChangeSerializer, PasswordResetRequestSerializer, PasswordResetSerializer,
     OrganizationSerializer, OrganizationMemberSerializer, OrganizationInvitationSerializer,
-    APIKeyCreateSerializer, APIKeySerializer, WebhookSerializer, WebhookDeliverySerializer
+    APIKeyCreateSerializer, APIKeySerializer, WebhookSerializer, WebhookDeliverySerializer,
+    SubscriptionChangeSerializer, OrganizationSubscriptionSerializer
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
@@ -634,4 +637,206 @@ def webhook_deliveries(request, webhook_id):
     return APIResponse({
         'success': True,
         'data': serializer.data
+    }, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def list_subscription_plan(request):
+    plans = [
+        {
+            'plan_name': 'starter',
+            'display_name': 'Starter',
+            'price': 0.00,
+            'surveys_per_month': '3',
+            'responses_per_survey': '100',
+            'team_members': 1,
+            'features': [
+                'Basic survey creation',
+                'CSV export',
+                'Community support',
+                'Email distribution'
+            ]
+        },
+        {
+            'plan_name': 'pro',
+            'display_name': 'Pro',
+            'price': 49.00,
+            'surveys_per_month': '50',
+            'responses_per_survey': '5,000',
+            'team_members': 10,
+            'features': [
+                'Everything in Starter',
+                'Custom branding',
+                'Conditional logic',
+                'API access & webhooks',
+                'JSON export',
+                'Email support',
+                'Advanced analytics',
+                'Email campaigns'
+            ]
+        },
+        {
+            'plan_name': 'enterprise',
+            'display_name': 'Enterprise',
+            'price': 299.00,
+            'surveys_per_month': 'Unlimited',
+            'responses_per_survey': '50,000+',
+            'team_members': 50,
+            'features': [
+                'Everything in Pro',
+                'White-labeling',
+                'PDF export',
+                'Priority 24/7 support',
+                'Custom integrations',
+                'Dedicated account manager',
+                'SLA guarantee',
+                'Advanced security'
+            ]
+        }
+    ]
+    
+    return APIResponse({
+        'success': True,
+        'data': plans
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_subscription_info(request, org_id):
+    """Get current subscription info for organization"""
+    try:
+        user_org = UserOrganization.objects.get(
+            user=request.user,
+            organization__org_id=org_id
+        )
+        organization = user_org.organization
+    except UserOrganization.DoesNotExist:
+        return APIResponse({
+            'success': False,
+            'message': 'Tidak memiliki akses ke organisasi ini'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    serializer = OrganizationSubscriptionSerializer(organization)
+    
+    return APIResponse({
+        'success': True,
+        'data': serializer.data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_subscription_plan(request, org_id):
+    try:
+        organization = Organization.objects.get(
+            org_id=org_id,
+            owner_user=request.user
+        )
+    except Organization.DoesNotExist:
+        return APIResponse({
+            'success': False,
+            'message': 'Hanya owner yang bisa mengubah subscription'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    serializer = SubscriptionChangeSerializer(data=request.data)
+    
+    if not serializer.is_valid():
+        return APIResponse({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    new_plan = serializer.validated_data['new_plan']
+    old_plan = organization.subscription_plan
+
+    if new_plan == 'starter':
+        current_surveys = Survey.objects.filter(
+            organization=organization,
+            status__in=['draft', 'active']
+        ).count()
+        
+        if current_surveys > 3:
+            return APIResponse({
+                'success': False,
+                'message': f'Tidak bisa downgrade ke Starter. Anda memiliki {current_surveys} surveys aktif (limit: 3)'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        current_team = UserOrganization.objects.filter(organization=organization).count()
+        if current_team > 1:
+            return APIResponse({
+                'success': False,
+                'message': f'Tidak bisa downgrade ke Starter. Anda memiliki {current_team} team members (limit: 1)'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    organization.subscription_plan = new_plan
+    organization.subscription_status = 'active'
+    organization.subscription_started_at = timezone.now()
+    
+    if new_plan != 'starter':
+        organization.subscription_expires_at = timezone.now() + timedelta(days=30)
+    else:
+        organization.subscription_expires_at = None
+    
+    organization.save()
+    
+    try:
+        send_mail(
+            subject=f'Subscription Changed to {new_plan.title()}',
+            message=f'Your subscription has been changed from {old_plan} to {new_plan}.',
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[request.user.email],
+            fail_silently=True
+        )
+    except:
+        pass
+    
+    return APIResponse({
+        'success': True,
+        'message': f'Subscription berhasil diubah ke {new_plan.title()}',
+        'data': {
+            'old_plan': old_plan,
+            'new_plan': new_plan,
+            'status': organization.subscription_status,
+            'expires_at': organization.subscription_expires_at.isoformat() if organization.subscription_expires_at else None
+        }
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def cancel_subscription(request, org_id):
+    """Cancel subscription (revert to starter)"""
+    try:
+        organization = Organization.objects.get(
+            org_id=org_id,
+            owner_user=request.user
+        )
+    except Organization.DoesNotExist:
+        return APIResponse({
+            'success': False,
+            'message': 'Hanya owner yang bisa cancel subscription'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    if organization.subscription_plan == 'starter':
+        return APIResponse({
+            'success': False,
+            'message': 'Sudah di plan Starter'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    old_plan = organization.subscription_plan
+    
+    # Set to starter plan
+    organization.subscription_plan = 'starter'
+    organization.subscription_status = 'canceled'
+    organization.subscription_expires_at = timezone.now()
+    organization.save()
+    
+    return APIResponse({
+        'success': True,
+        'message': f'Subscription {old_plan} telah dibatalkan. Akun akan kembali ke Starter plan.',
+        'data': {
+            'current_plan': 'starter',
+            'status': 'canceled'
+        }
     }, status=status.HTTP_200_OK)

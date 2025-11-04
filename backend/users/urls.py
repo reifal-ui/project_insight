@@ -17,4 +17,9 @@ urlpatterns = [
 
     path('profile/', views.ProfileView.as_view(), name='profile'),
     path('profile/delete/', views.delete_account, name='delete-account'),
+
+    path('subscriptions/plans/', views.list_subscription_plan, name='list-plans'),
+    path('organizations/<int:org_id>/subscription/', views.get_subscription_info, name='subscription-info'),
+    path('organizations/<int:org_id>/subscription/change/', views.change_subscription_plan, name='change-subscription'),
+    path('organizations/<int:org_id>/subscription/cancel/', views.cancel_subscription, name='cancel-subscription'),
 ]

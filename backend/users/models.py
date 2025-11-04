@@ -51,11 +51,11 @@ class User(AbstractUser):
 
 class Organization(models.Model):
     SUBSCRIPTION_CHOICES = [
-        ('free', 'Free'),
-        ('basic', 'Basic'),
-        ('premium', 'Premium'),
+        ('starter', 'Starter'),
+        ('pro', 'Pro'),
         ('enterprise', 'Enterprise'),
     ]
+    
     org_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     owner_user = models.ForeignKey(
@@ -66,9 +66,24 @@ class Organization(models.Model):
     subscription_plan = models.CharField(
         max_length=50,
         choices=SUBSCRIPTION_CHOICES,
-        default='free'
+        default='starter'
     )
     created_at = models.DateTimeField(default=timezone.now)
+    subscription_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('active', 'Active'),
+            ('trialing', 'Trial'),
+            ('expired', 'Expired'),
+            ('canceled', 'Canceled')
+        ],
+        default='trialing'
+    )
+    trial_ends_at = models.DateTimeField(blank=True, null=True)
+    subscription_started_at = models.DateTimeField(blank=True, null=True)
+    subscription_expires_at = models.DateTimeField(blank=True, null=True)
+    surveys_created_this_month = models.IntegerField(default=0)
+    last_usage_reset = models.DateField(blank=True, null=True)
     
     class Meta:
         db_table = 'organizations'
@@ -77,6 +92,81 @@ class Organization(models.Model):
     
     def __str__(self):
         return self.name
+    
+    def get_survey_limit(self):
+        limits = {
+            'starter': 3,
+            'pro': 50,
+            'enterprise': None
+        }
+        return limits.get(self.subscription_plan)
+    
+    def get_response_limit(self):
+        limits = {
+            'starter': 100,
+            'pro': 5000,
+            'enterprise': 50000
+        }
+        return limits.get(self.subscription_plan)
+    
+    def get_team_member_limit(self):
+        limits = {
+            'starter': 1,
+            'pro': 10,
+            'enterprise': 50
+        }
+        return limits.get(self.subscription_plan)
+    
+    def can_create_survey(self):
+        """Check if org can create more surveys this month"""
+        survey_limit = self.get_survey_limit()
+        if survey_limit is None:
+            return True
+        today = timezone.now().date()
+        if not self.last_usage_reset or self.last_usage_reset.month != today.month:
+            self.surveys_created_this_month = 0
+            self.last_usage_reset = today
+            self.save(update_fields=['surveys_created_this_month', 'last_usage_reset'])
+        
+        return self.surveys_created_this_month < survey_limit
+    
+    def has_feature(self, feature_name):
+        features = {
+            'starter': [
+                'basic_surveys',
+                'csv_export',
+            ],
+            'pro': [
+                'basic_surveys',
+                'csv_export',
+                'json_export',
+                'custom_branding',
+                'conditional_logic',
+                'api_access',
+                'webhooks',
+                'email_support'
+            ],
+            'enterprise': [
+                'basic_surveys',
+                'csv_export',
+                'json_export',
+                'pdf_export',
+                'custom_branding',
+                'white_labeling',
+                'conditional_logic',
+                'api_access',
+                'webhooks',
+                'priority_support',
+                'custom_integrations'
+            ]
+        }
+        
+        plan_features = features.get(self.subscription_plan, [])
+        return feature_name in plan_features
+    
+    def increment_survey_count(self):
+        self.surveys_created_this_month += 1
+        self.save(update_fields=['surveys_created_this_month'])
 
 class UserOrganization(models.Model):
     ROLE_CHOICES = [
