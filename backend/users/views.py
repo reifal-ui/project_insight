@@ -324,60 +324,126 @@ def organization_members(request, org_id):
 @permission_classes([permissions.IsAuthenticated])
 def invite_user(request, org_id):
     organization = get_object_or_404(Organization, org_id=org_id)
-
     try:
         user_org = UserOrganization.objects.get(user=request.user, organization=organization)
         if user_org.role not in ['admin'] and organization.owner_user != request.user:
             return APIResponse({
-                'error': 'Hanya admin yang bisa invite users.'
+                'success': False,
+                'error': 'Only admins can invite users.'
             }, status=status.HTTP_403_FORBIDDEN)
     except UserOrganization.DoesNotExist:
         return APIResponse({
-            'error': 'Acces denied'
+            'success': False,
+            'error': 'Access denied'
         }, status=status.HTTP_403_FORBIDDEN)
+    email = request.data.get('email', '').strip().lower()
+    role = request.data.get('role', 'member')
+    if not email:
+        return APIResponse({
+            'success': False,
+            'error': 'Email address is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    from django.core.validators import validate_email as django_validate_email
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    try:
+        django_validate_email(email)
+    except DjangoValidationError:
+        return APIResponse({
+            'success': False,
+            'error': 'Invalid email format'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    if role not in ['admin', 'member', 'viewer']:
+        return APIResponse({
+            'success': False,
+            'error': 'Invalid role. Must be: admin, member, or viewer'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    current_team_count = UserOrganization.objects.filter(organization=organization).count()
+    team_limit = organization.get_team_member_limit()
     
-    serializer = OrganizationInvitationSerializer(data=request.data)
-    if serializer.is_valid():
-        email = serializer.validated_data['email']
-        role = serializer.validated_data.get('role', 'member')
-
-        if User.objects.filter(email=email).exists():
-            existing_user = User.objects.get(email=email)
-            if UserOrganization.objects.filter(user=existing_user, organization=organization).exists():
-                return APIResponse({
-                    'error': 'User ini sudah menjadi anggota organisasi.'
-                }, status=status.HTTP_400_BAD_REQUEST)   
-
-        if OrganizationInvitation.objects.filter(email=email, organization=organization, is_accepted=False).exists():
+    if current_team_count >= team_limit:
+        return APIResponse({
+            'success': False,
+            'error': f'Team member limit reached. Your {organization.subscription_plan} plan allows {team_limit} members. Upgrade to add more.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(email=email).exists():
+        existing_user = User.objects.get(email=email)
+        if UserOrganization.objects.filter(user=existing_user, organization=organization).exists():
             return APIResponse({
-                'error': 'Undangan sudah dikirim ke email ini.'
+                'success': False,
+                'error': 'This user is already a member of this organization'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+    existing_invitation = OrganizationInvitation.objects.filter(
+        email=email, 
+        organization=organization, 
+        is_accepted=False
+    ).first()
+    
+    if existing_invitation:
+        # Check if expired
+        if existing_invitation.is_expired():
+            # Delete expired invitation and create new one
+            existing_invitation.delete()
+        else:
+            return APIResponse({
+                'success': False,
+                'error': 'An invitation has already been sent to this email'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Create invitation
+    try:
         invitation = OrganizationInvitation.objects.create(
             email=email,
             organization=organization,
             invited_by=request.user,
             role=role
         )
-        invitation_url = f'{settings.SITE_URL}/organizations/invitations/accept/{invitation.token}'
-
+        
+        # Send invitation email
+        invitation_url = f'{settings.SITE_URL}/accept-invitation?token={invitation.token}'
+        
         try:
             send_mail(
-                subject=f'Undangan untuk bergabung dengan {organization.name}',
-                message=f'Anda telah diundang untuk bergabung dengan {organization.name} as a {role}.\n\nKlik tautan berikut untuk menerima undangan: {invitation_url}',
+                subject=f'Invitation to join {organization.name} on Project Insight',
+                message=f'''Hello,
+
+You've been invited to join {organization.name} as a {role} on Project Insight.
+
+Click the link below to accept the invitation:
+{invitation_url}
+
+This invitation will expire in 7 days.
+
+If you didn't expect this invitation, you can safely ignore this email.
+
+Best regards,
+Project Insight Team''',
                 from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@projectinsight.com'),
                 recipient_list=[email],
                 fail_silently=False,
             )
+            
+            email_sent = True
         except Exception as e:
-            print(f"Error sending email: {e}")
+            print(f"Error sending invitation email: {e}")
+            email_sent = False
         
         return APIResponse({
-            'message': 'Undangan telah dikirim.',
-            'invitation_id': invitation.id
+            'success': True,
+            'message': 'Invitation sent successfully',
+            'data': {
+                'invitation_id': invitation.id,
+                'email': invitation.email,
+                'role': invitation.role,
+                'expires_at': invitation.expires_at.isoformat(),
+                'email_sent': email_sent
+            }
         }, status=status.HTTP_201_CREATED)
-    
-    return APIResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Exception as e:
+        return APIResponse({
+            'success': False,
+            'error': f'Failed to create invitation: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])

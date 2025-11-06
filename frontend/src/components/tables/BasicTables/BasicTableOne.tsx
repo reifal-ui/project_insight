@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Edit, Trash2, UserPlus, Crown, Shield, User, X } from "lucide-react";
+import { Search, Edit, Trash2, UserPlus, Crown, Shield, User, X, AlertCircle, CheckCircle } from "lucide-react";
 
 const API_BASE_URL = "http://localhost:8000/api/v1";
 const getAuthToken = () => localStorage.getItem("token") || "";
@@ -17,6 +17,7 @@ interface Organization {
   name: string;
   subscription_plan: string;
   member_count: number;
+  role?: string;
 }
 
 export default function TeamsPage() {
@@ -32,6 +33,7 @@ export default function TeamsPage() {
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrganization();
@@ -42,6 +44,21 @@ export default function TeamsPage() {
       fetchTeamMembers();
     }
   }, [organization]);
+
+  // Auto-clear messages
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
 
   const fetchOrganization = async () => {
     try {
@@ -73,10 +90,6 @@ export default function TeamsPage() {
       setError(null);
       const token = getAuthToken();
       
-      console.log('Fetching members for org:', organization.org_id);
-      console.log('API URL:', `${API_BASE_URL}/organizations/${organization.org_id}/members/`);
-      
-      // Use the correct endpoint from backend urls.py
       const response = await fetch(
         `${API_BASE_URL}/organizations/${organization.org_id}/members/`,
         {
@@ -87,16 +100,12 @@ export default function TeamsPage() {
         }
       );
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
         throw new Error(errorData.error || errorData.message || "Failed to fetch team members");
       }
 
       const data = await response.json();
-      console.log('Members data:', data);
       setMembers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Fetch members error:', err);
@@ -108,8 +117,15 @@ export default function TeamsPage() {
   };
 
   const handleInviteMember = async () => {
+    // Validation
     if (!inviteEmail.trim()) {
       setError("Please enter an email address");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail.trim())) {
+      setError("Please enter a valid email address");
       return;
     }
 
@@ -120,6 +136,7 @@ export default function TeamsPage() {
 
     setIsInviting(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const token = getAuthToken();
@@ -132,7 +149,7 @@ export default function TeamsPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            email: inviteEmail,
+            email: inviteEmail.trim().toLowerCase(),
             role: inviteRole,
           }),
         }
@@ -140,15 +157,22 @@ export default function TeamsPage() {
 
       const responseData = await response.json();
 
+      console.log('Invite response:', responseData);
+
       if (!response.ok) {
-        throw new Error(responseData.error || "Failed to send invitation");
+        throw new Error(responseData.error || responseData.message || "Failed to send invitation");
       }
 
+      setSuccess(responseData.message || "Invitation sent successfully!");
       setShowInviteModal(false);
       setInviteEmail("");
       setInviteRole("member");
-      fetchTeamMembers();
+      
+      // Refresh member list and organization data
+      await fetchOrganization();
+      await fetchTeamMembers();
     } catch (err) {
+      console.error('Invite error:', err);
       setError(err instanceof Error ? err.message : "Failed to send invitation");
     } finally {
       setIsInviting(false);
@@ -161,11 +185,12 @@ export default function TeamsPage() {
     if (!organization) return;
 
     setError(null);
+    setSuccess(null);
 
     try {
       const token = getAuthToken();
       const response = await fetch(
-        `${API_BASE_URL}/organizations/${organization.org_id}/members/${userId}/`,
+        `${API_BASE_URL}/organizations/${organization.org_id}/members/${userId}/remove/`,
         {
           method: "DELETE",
           headers: {
@@ -175,11 +200,17 @@ export default function TeamsPage() {
         }
       );
 
-      if (!response.ok) throw new Error("Failed to remove member");
+      const responseData = await response.json().catch(() => ({}));
 
-      fetchTeamMembers();
+      if (!response.ok) {
+        throw new Error(responseData.error || "Failed to remove member");
+      }
+
+      setSuccess("Member removed successfully");
+      await fetchOrganization();
+      await fetchTeamMembers();
     } catch (err) {
-      setError("Failed to remove member");
+      setError(err instanceof Error ? err.message : "Failed to remove member");
     }
   };
 
@@ -187,6 +218,7 @@ export default function TeamsPage() {
     if (!organization) return;
 
     setError(null);
+    setSuccess(null);
 
     try {
       const token = getAuthToken();
@@ -208,6 +240,7 @@ export default function TeamsPage() {
         throw new Error(responseData.error || "Failed to update role");
       }
 
+      setSuccess("Role updated successfully");
       setShowEditModal(false);
       setEditingMember(null);
       fetchTeamMembers();
@@ -266,6 +299,21 @@ export default function TeamsPage() {
     return name.substring(0, 2);
   };
 
+  const getTeamLimit = () => {
+    if (!organization) return 1;
+    const limits: Record<string, number> = {
+      starter: 1,
+      pro: 10,
+      enterprise: 50
+    };
+    return limits[organization.subscription_plan] || 1;
+  };
+
+  const canInviteMore = () => {
+    if (!organization) return false;
+    return organization.member_count < getTeamLimit();
+  };
+
   const filteredMembers = members.filter((member) => {
     const matchesSearch =
       member.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -274,7 +322,7 @@ export default function TeamsPage() {
     return matchesSearch && matchesRole;
   });
 
-  const canManageMembers = organization?.subscription_plan !== "starter";
+  const canManageMembers = organization?.role === 'admin';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
@@ -285,9 +333,18 @@ export default function TeamsPage() {
           <p className="text-gray-500 dark:text-gray-400 mt-2">Manage your team members and permissions</p>
         </div>
 
+        {/* Success Message */}
+        {success && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            <p className="text-green-800 dark:text-green-200 text-sm">{success}</p>
+          </div>
+        )}
+
         {/* Error Display */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
           </div>
         )}
@@ -301,16 +358,21 @@ export default function TeamsPage() {
                   {organization.name}
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {organization.member_count} members · {organization.subscription_plan} plan
+                  {organization.member_count} / {getTeamLimit()} members · {organization.subscription_plan} plan
                 </p>
               </div>
               {canManageMembers && (
                 <button
-                  onClick={() => setShowInviteModal(true)}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                  onClick={() => canInviteMore() ? setShowInviteModal(true) : setError(`Team limit reached (${getTeamLimit()} members). Upgrade your plan to add more.`)}
+                  disabled={!canInviteMore()}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors ${
+                    canInviteMore() 
+                      ? 'bg-blue-600 hover:bg-blue-700' 
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   <UserPlus className="w-4 h-4" />
-                  Invite Member
+                  Invite Member {!canInviteMore() && '(Limit Reached)'}
                 </button>
               )}
             </div>
@@ -444,7 +506,11 @@ export default function TeamsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-gray-900 p-6 shadow-xl">
             <button
-              onClick={() => setShowInviteModal(false)}
+              onClick={() => {
+                setShowInviteModal(false);
+                setInviteEmail("");
+                setInviteRole("member");
+              }}
               className="absolute top-4 right-4 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               <X className="w-5 h-5 text-gray-500" />
@@ -465,6 +531,7 @@ export default function TeamsPage() {
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="member@example.com"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyPress={(e) => e.key === 'Enter' && handleInviteMember()}
                 />
               </div>
 
@@ -477,18 +544,19 @@ export default function TeamsPage() {
                   onChange={(e) => setInviteRole(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                  <option value="viewer">Viewer</option>
+                  <option value="member">Member - Can create and manage surveys</option>
+                  <option value="admin">Admin - Full access to manage team and settings</option>
+                  <option value="viewer">Viewer - Can only view surveys and responses</option>
                 </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Members can view and respond. Admins can manage surveys and members. Viewers can only view.
-                </p>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={() => setShowInviteModal(false)}
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteEmail("");
+                    setInviteRole("member");
+                  }}
                   className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700 transition-colors"
                 >
                   Cancel

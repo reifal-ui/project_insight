@@ -21,6 +21,7 @@ import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
+import WebhookManagementPage from "./pages/Integration/WebHookManagementPage";
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
             
             {/* Integrations */}
             <Route path="integrations/api" element={<ApiManagementPage />} />
+            <Route path="integrations/webhook" element={<WebhookManagementPage />} />
             {/* Other pages */}
             <Route path="blank" element={<Blank />} />
             
