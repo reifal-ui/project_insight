@@ -47,8 +47,6 @@ const navItems: NavItem[] = [
     name: "Survey Management",
     icon: <ListIcon />,
     subItems: [
-      { name: "All Surveys", path: "surveys", pro: false },
-      { name: "Scheduler", path: "calendar", pro: false },
       { name: "Surveys", path: "surveys", pro: false },
       { name: "Respondents", path: "calendar", pro: false },
     ],
