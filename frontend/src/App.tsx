@@ -16,12 +16,14 @@ import BasicTables from "./pages/Tables/BasicTables";
 import FormElements from "./pages/Forms/FormElements";
 import SurveyEditPage from "./components/form/form-elements/SurveyEditPage";
 import PublicSurveyPage from "./components/form/form-elements/PublicSurveyPage";
+import SurveyResponses from "./components/form/form-elements/SurveyResponses";
 import ApiManagementPage from "./pages/Integration/ApiManagementPage";
 import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import WebhookManagementPage from "./pages/Integration/WebHookManagementPage";
+import DistributionPage from './pages/distributions/DistributionPage';
 
 export default function App() {
   return (
@@ -37,9 +39,11 @@ export default function App() {
             
             {/* Survey Management */}
             <Route path="surveys" element={<FormElements />} />
-            <Route path="surveys/:surveyId" element={<SurveyEditPage />} />      
+            <Route path="surveys/:surveyId" element={<SurveyEditPage />} />  
+            <Route path="surveys/:surveyId/responses" element={<SurveyResponses />} />    
             {/* Calendar for scheduling */}
             <Route path="calendar" element={<Calendar />} />
+            <Route path="distribution" element={<DistributionPage />} />
             
             {/* Team Management */}
             <Route path="teams" element={<BasicTables />} />
@@ -69,6 +73,7 @@ export default function App() {
           
           {/* Public Survey - No Auth Required */}
           <Route path="/TailAdmin/survey/:shareToken" element={<PublicSurveyPage />} />
+
           
           {/* Fallback Route */}
           <Route path="*" element={<NotFound />} />

@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Search, Edit, Trash2, UserPlus, Crown, Shield, User, X, AlertCircle, CheckCircle } from "lucide-react";
 
 const API_BASE_URL = "http://localhost:8000/api/v1";
-const getAuthToken = () => localStorage.getItem("token") || "";
 
 interface TeamMember {
   user: string;
@@ -45,7 +44,6 @@ export default function TeamsPage() {
     }
   }, [organization]);
 
-  // Auto-clear messages
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 5000);
@@ -62,7 +60,7 @@ export default function TeamsPage() {
 
   const fetchOrganization = async () => {
     try {
-      const token = getAuthToken();
+      const token = localStorage.getItem("token");
       const response = await fetch(`${API_BASE_URL}/profile/`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -88,7 +86,7 @@ export default function TeamsPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const token = getAuthToken();
+      const token = localStorage.getItem("token");
       
       const response = await fetch(
         `${API_BASE_URL}/organizations/${organization.org_id}/members/`,
@@ -117,7 +115,6 @@ export default function TeamsPage() {
   };
 
   const handleInviteMember = async () => {
-    // Validation
     if (!inviteEmail.trim()) {
       setError("Please enter an email address");
       return;
@@ -139,7 +136,7 @@ export default function TeamsPage() {
     setSuccess(null);
 
     try {
-      const token = getAuthToken();
+      const token = localStorage.getItem("token");
       const response = await fetch(
         `${API_BASE_URL}/organizations/${organization.org_id}/invite/`,
         {
@@ -157,8 +154,6 @@ export default function TeamsPage() {
 
       const responseData = await response.json();
 
-      console.log('Invite response:', responseData);
-
       if (!response.ok) {
         throw new Error(responseData.error || responseData.message || "Failed to send invitation");
       }
@@ -168,7 +163,6 @@ export default function TeamsPage() {
       setInviteEmail("");
       setInviteRole("member");
       
-      // Refresh member list and organization data
       await fetchOrganization();
       await fetchTeamMembers();
     } catch (err) {
@@ -188,7 +182,7 @@ export default function TeamsPage() {
     setSuccess(null);
 
     try {
-      const token = getAuthToken();
+      const token = localStorage.getItem("token");
       const response = await fetch(
         `${API_BASE_URL}/organizations/${organization.org_id}/members/${userId}/remove/`,
         {
@@ -221,7 +215,7 @@ export default function TeamsPage() {
     setSuccess(null);
 
     try {
-      const token = getAuthToken();
+      const token = localStorage.getItem("token");
       const response = await fetch(
         `${API_BASE_URL}/organizations/${organization.org_id}/members/${userId}/`,
         {
@@ -327,13 +321,11 @@ export default function TeamsPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Page Header */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Team Management</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2">Manage your team members and permissions</p>
         </div>
 
-        {/* Success Message */}
         {success && (
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start gap-3">
             <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
@@ -341,7 +333,6 @@ export default function TeamsPage() {
           </div>
         )}
 
-        {/* Error Display */}
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -349,7 +340,6 @@ export default function TeamsPage() {
           </div>
         )}
 
-        {/* Organization Info */}
         {organization && (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
             <div className="flex items-center justify-between">
@@ -379,7 +369,6 @@ export default function TeamsPage() {
           </div>
         )}
 
-        {/* Search and Filter */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
           <div className="flex flex-col gap-4 sm:flex-row">
             <div className="relative flex-1 max-w-md">
@@ -405,7 +394,6 @@ export default function TeamsPage() {
           </div>
         </div>
 
-        {/* Members Table */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -501,7 +489,6 @@ export default function TeamsPage() {
         </div>
       </div>
 
-      {/* Invite Modal */}
       {showInviteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-gray-900 p-6 shadow-xl">
@@ -574,7 +561,6 @@ export default function TeamsPage() {
         </div>
       )}
 
-      {/* Edit Role Modal */}
       {editingMember && showEditModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-gray-900 p-6 shadow-xl">

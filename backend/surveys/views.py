@@ -11,6 +11,7 @@ from django.http import HttpResponse
 import csv
 from datetime import timedelta
 from django.db.models.functions import TruncDate
+from users.webhook_sender import send_webhook
 
 from users.models import UserOrganization, Organization
 from .models import Survey, Question, QuestionOption, Response, ResponseAnswer, SurveyAnalytics
@@ -202,6 +203,14 @@ def publish_survey(request, survey_id):
     survey.published_at = timezone.now()
     survey.save(update_fields=['status', 'published_at'])
 
+    webhook_payload = {
+    'survey_id': str(survey.survey_id),
+    'title': survey.title,
+    'status': survey.status,
+    'published_at': survey.published_at.isoformat()
+    }
+    send_webhook(survey.organization, 'survey.published', webhook_payload)
+
     return APIResponse({
         'success': True,
         'message': 'Survey berhasil dipublikasi',
@@ -234,6 +243,15 @@ def close_survey(request, survey_id):
     survey.save(update_fields=['status', 'closes_at'])
     analytics, created = SurveyAnalytics.objects.get_or_create(survey=survey)
     analytics.recalculate()
+
+    webhook_payload = {
+    'survey_id': str(survey.survey_id),
+    'title': survey.title,
+    'status': survey.status,
+    'closed_at': survey.closes_at.isoformat(),
+    'total_responses': survey.responses.count()
+    }
+    send_webhook(survey.organization, 'survey.closed', webhook_payload)
 
     return APIResponse({
         'success': True,
@@ -300,6 +318,17 @@ def submit_survey_response(request, share_token):
                 response = serializer.save()
                 analytics, created = SurveyAnalytics.objects.get_or_create(survey=survey)
                 analytics.recalculate()
+
+                webhook_payload = {
+                'response_id': str(response.response_id),
+                'survey_id': str(survey.survey_id),
+                'survey_title': survey.title,
+                'respondent_email': response.respondent_email or 'anonymous',
+                'is_completed': response.is_completed,
+                'submitted_at': response.submitted_at.isoformat() if response.submitted_at else None,
+                'completion_time_seconds': response.completion_time_seconds
+            }
+            send_webhook(survey.organization, 'response.new', webhook_payload)
             
             return APIResponse({
                 'success': True,

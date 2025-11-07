@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import ContactList, Contact, ContactImport, SurveyInvitation, EmailTemplate, EmailCampaign, InvitationTracking
 import csv
 import io
+from users.webhook_sender import send_webhook
 from surveys.models import Survey
 
 class ContactListSerializer(serializers.ModelSerializer):
@@ -69,6 +70,18 @@ class ContactSerializer(serializers.ModelSerializer):
                 organization=organization
             )
             contact.contact_lists.set(contact_lists)
+        
+        webhook_payload = {
+        'contact_id': str(contact.contact_id),
+        'email': contact.email,
+        'first_name': contact.first_name or '',
+        'last_name': contact.last_name or '',
+        'company': contact.company or '',
+        'phone': contact.phone or '',
+        'status': contact.status,
+        'created_at': contact.created_at.isoformat()
+        }
+        send_webhook(organization, 'contact.created', webhook_payload)
 
         return contact
     
